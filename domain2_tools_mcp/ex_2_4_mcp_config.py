@@ -13,6 +13,7 @@ Run it:
     python ex_2_4_mcp_config.py
 """
 import json
+import os
 import pathlib
 import shutil
 import subprocess
@@ -129,9 +130,13 @@ if __name__ == "__main__":
         print("   %-22s %s" % (r["uri"], r["description"]))
     print()
 
+    # shutil.which finds the real CLI. Printed with $HOME collapsed to ~,
+    # so the output does not carry one machine's home directory.
     claude = shutil.which("claude")
+    # Printed with $HOME collapsed to ~; the real path is what gets run.
+    shown = claude.replace(os.path.expanduser("~"), "~") if claude else None
     print("verify a server is actually connected:")
-    print("   claude mcp list        ", "(claude found at %s)" % claude if claude
+    print("   claude mcp list        ", "(claude found at %s)" % shown if shown
           else "(install Claude Code to run this)")
     if claude:
         out = subprocess.run([claude, "mcp", "list"], capture_output=True, text=True,

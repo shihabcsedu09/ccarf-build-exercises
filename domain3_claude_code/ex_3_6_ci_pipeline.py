@@ -14,6 +14,7 @@ Run it:
     python ex_3_6_ci_pipeline.py
 """
 import json
+import os
 import pathlib
 import shlex
 import shutil
@@ -130,8 +131,12 @@ if __name__ == "__main__":
     (root / ".claude" / "settings.json").write_text(json.dumps(CI_SETTINGS, indent=2))
 
     cmd = build_command(schema_path)
+    # The schema really is written to a temp directory, but printing that
+    # path would just be noise: in a repository it sits beside the workflow.
+    shown = [".claude/review-schema.json" if c == str(schema_path) else c
+             for c in cmd]
     print("the command the job runs:")
-    print("   ", " ".join(shlex.quote(c) for c in cmd)[:300])
+    print("   ", " ".join(shlex.quote(c) for c in shown))
     print()
     print("what each flag answers:")
     for flag, why in [
@@ -159,8 +164,13 @@ if __name__ == "__main__":
     print()
     print("the workflow file:")
     print(WORKFLOW % (" ".join(shlex.quote(c) for c in cmd[:6]) + " ..."))
+    # shutil.which finds the real CLI. Printed with $HOME collapsed to ~,
+    # so the output does not carry one machine's home directory.
     claude = shutil.which("claude")
-    print("claude on this machine:", claude or "not installed")
+    # Printed with $HOME collapsed to ~, so the output of this file does not
+    # carry one machine's home directory. The real path is what gets run.
+    shown = claude.replace(os.path.expanduser("~"), "~") if claude else None
+    print("claude on this machine:", shown or "not installed")
     if claude:
         v = subprocess.run([claude, "--version"], capture_output=True, text=True, timeout=30)
         print("version:", v.stdout.strip())

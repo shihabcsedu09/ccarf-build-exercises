@@ -36,7 +36,7 @@ What the exercise is meant to teach:
 
 `ex_1_3_context_passing.py` · Intermediate · about 50 minutes
 
-Running it shows "Write the report." against a subagent prompt carrying goal, findings and output shape.
+Running it shows a bare 'Write the report.' against a subagent prompt carrying goal, findings and output shape.
 
 What the exercise is meant to teach:
 

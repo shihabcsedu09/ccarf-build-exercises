@@ -8,7 +8,7 @@ Run them all with `python ../run_all.py 5`.
 
 `ex_5_1_case_facts.py` · Intermediate · about 45 minutes
 
-Running it shows a summary that says "a recent order" and a facts block that still says 247.83 on order #8891, asked at turn 30.
+Running it shows a summary that says 'a recent order' and a facts block that still says 247.83 on order #8891, asked at turn 30.
 
 What the exercise is meant to teach:
 
