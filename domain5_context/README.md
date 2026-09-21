@@ -8,7 +8,7 @@ Run them all with `python ../run_all.py 5`.
 
 `ex_5_1_case_facts.py` · Intermediate · about 45 minutes
 
-Running it shows a summariser turning 187.43 into about $190 while the facts block keeps the exact figure.
+Running it shows a summary that says "a recent order" and a facts block that still says 247.83 on order #8891, asked at turn 30.
 
 What the exercise is meant to teach:
 
@@ -22,7 +22,7 @@ What the exercise is meant to teach:
 
 `ex_5_2_escalation.py` · Intermediate · about 40 minutes
 
-Running it shows five cases against the three real triggers, with frustration and self-reported confidence correctly ignored.
+Running it shows five cases against the three real triggers, with frustration and self-reported confidence deliberately left out.
 
 What the exercise is meant to teach:
 
@@ -36,7 +36,7 @@ What the exercise is meant to teach:
 
 `ex_5_3_error_propagation.py` · Advanced · about 50 minutes
 
-Running it shows a transient failure recovering, a permanent one reported with its 118 partial rows, and an empty result reported as success.
+Running it shows a timeout offering alternatives, a permission failure that no retry fixes, and an empty search reported as a finding.
 
 What the exercise is meant to teach:
 
@@ -50,7 +50,7 @@ What the exercise is meant to teach:
 
 `ex_5_4_context_resilience.py` · Advanced · about 60 minutes
 
-Running it shows a crash-resume briefing rebuilt from a file, and 2400 lines of context saved by delegating.
+Running it shows a run resumed from a manifest after a crash, and an idempotency key stopping a refund being paid twice.
 
 What the exercise is meant to teach:
 
@@ -64,7 +64,7 @@ What the exercise is meant to teach:
 
 `ex_5_5_calibrated_router.py` · Advanced · about 50 minutes
 
-Running it shows 97% overall hiding a 60% segment, and the same 0.96 score routed two different ways.
+Running it shows 90.6% overall hiding a 60% segment, and the same 0.99 score routed two different ways.
 
 What the exercise is meant to teach:
 
@@ -78,7 +78,7 @@ What the exercise is meant to teach:
 
 `ex_5_6_provenance.py` · Advanced · about 60 minutes
 
-Running it shows attribution surviving a summarisation step, a conflict annotated with both dates, and an unsourced sentence cut.
+Running it shows the same claim written with and without its source fields, and a conflict annotated with both dates.
 
 What the exercise is meant to teach:
 

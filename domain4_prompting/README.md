@@ -8,7 +8,7 @@ Run them all with `python ../run_all.py 4`.
 
 `ex_4_1_explicit_criteria.py` · Intermediate · about 45 minutes
 
-Running it shows a vague prompt reporting 4 findings and an explicit one reporting the 2 that are real.
+Running it shows a vague prompt flagging a TODO and inventing a severity word, and explicit criteria finding the false safety claim.
 
 What the exercise is meant to teach:
 
@@ -22,7 +22,7 @@ What the exercise is meant to teach:
 
 `ex_4_2_few_shot.py` · Intermediate · about 45 minutes
 
-Running it shows an example set that leaks a vendor name into every extraction, and one that teaches null instead.
+Running it shows examples that leak a vendor name into every extraction, and examples that teach null instead.
 
 What the exercise is meant to teach:
 
@@ -49,7 +49,7 @@ What the exercise is meant to teach:
 
 `ex_4_4_validation_retry.py` · Advanced · about 60 minutes
 
-Running it shows a retry that fixes an arithmetic error, and a missing attachment that no retry can fix.
+Running it shows a retry that fixes an arithmetic error and a swapped date, and a missing attachment that no retry can fix.
 
 What the exercise is meant to teach:
 
@@ -63,7 +63,7 @@ What the exercise is meant to teach:
 
 `ex_4_5_batching.py` · Intermediate · about 45 minutes
 
-Running it shows which workloads belong in a batch, and the submission interval a 36-hour promise allows.
+Running it shows a real Batches call with custom_id, two of ten results failing for different reasons, and the 12-hour submission interval a 36-hour promise allows.
 
 What the exercise is meant to teach:
 
@@ -77,7 +77,7 @@ What the exercise is meant to teach:
 
 `ex_4_6_fresh_eyes.py` · Advanced · about 60 minutes
 
-Running it shows the defect the writing session defends, and what a reported 0.9 has actually been worth.
+Running it shows the defect the writing session defends, found by a session that never saw the writing.
 
 What the exercise is meant to teach:
 

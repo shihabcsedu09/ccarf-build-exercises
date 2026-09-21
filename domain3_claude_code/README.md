@@ -8,7 +8,7 @@ Run them all with `python ../run_all.py 3`.
 
 `ex_3_1_claude_md_hierarchy.py` · Beginner · about 30 minutes
 
-Running it shows which CLAUDE.md files load for a given path, who else sees each one, and why a personal rule never reaches the team.
+Running it shows real files on disk, which of them load for a given path, and why a personal rule never reaches the team.
 
 What the exercise is meant to teach:
 
@@ -22,7 +22,7 @@ What the exercise is meant to teach:
 
 `ex_3_2_commands_skills.py` · Intermediate · about 30 minutes
 
-Running it shows where a command lives, when a personal one shadows the team's, and what makes a skill different from a slash command.
+Running it shows a real command, skill and subagent with their frontmatter, and what separates the three.
 
 What the exercise is meant to teach:
 
@@ -36,7 +36,7 @@ What the exercise is meant to teach:
 
 `ex_3_3_path_rules.py` · Intermediate · about 30 minutes
 
-Running it shows the rules that load for three different paths, and what putting them all in the root file costs.
+Running it shows real .claude/rules/*.md files, the rules that load for three different paths, and what one root file costs.
 
 What the exercise is meant to teach:
 
@@ -50,7 +50,7 @@ What the exercise is meant to teach:
 
 `ex_3_4_execution_mode.py` · Intermediate · about 45 minutes
 
-Running it shows plan mode or straight in, decided on whether the approach is settled rather than on size.
+Running it shows plan mode or straight in, decided on reversibility and whether the approach is settled, never on size.
 
 What the exercise is meant to teach:
 
@@ -64,7 +64,7 @@ What the exercise is meant to teach:
 
 `ex_3_5_refinement.py` · Beginner · about 30 minutes
 
-Running it shows four situations mapped to four different refinement moves.
+Running it shows four situations, four different refinement moves, each one a real call.
 
 What the exercise is meant to teach:
 
@@ -78,7 +78,7 @@ What the exercise is meant to teach:
 
 `ex_3_6_ci_pipeline.py` · Advanced · about 45 minutes
 
-Running it shows the non-interactive command, the deny list beating the allow list, and reading the JSON envelope.
+Running it shows the non-interactive command built flag by flag, deny beating allow, and a real JSON envelope parsed.
 
 What the exercise is meant to teach:
 

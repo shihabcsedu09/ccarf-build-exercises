@@ -8,7 +8,7 @@ Run them all with `python ../run_all.py 2`.
 
 `ex_2_1_tool_descriptions.py` · Beginner · about 30 minutes
 
-Running it shows a thin description scoring nothing on all five parts, and a full one scoring all five.
+Running it shows the same question routed to get_customer on 31-character descriptions and to lookup_order on 381-character ones.
 
 What the exercise is meant to teach:
 
@@ -21,7 +21,7 @@ What the exercise is meant to teach:
 
 `ex_2_2_structured_errors.py` · Intermediate · about 45 minutes
 
-Running it shows each of the four error categories routed to a different next move, and an empty search reported as success.
+Running it shows four error categories routed to four different next moves, and an empty search returned as success.
 
 What the exercise is meant to teach:
 
@@ -34,7 +34,7 @@ What the exercise is meant to teach:
 
 `ex_2_3_tool_distribution.py` · Intermediate · about 45 minutes
 
-Running it shows a coordinator that cannot write, a researcher that cannot delegate, and the moment tool_choice has to force a call.
+Running it shows 18 tools cut to four role-shaped sets, all four values of tool_choice, and why any breaks an agent loop.
 
 What the exercise is meant to teach:
 
@@ -48,7 +48,7 @@ What the exercise is meant to teach:
 
 `ex_2_4_mcp_config.py` · Beginner · about 30 minutes
 
-Running it shows a config failing loudly on a missing variable, and an audit catching a literal token in the file.
+Running it shows a real .mcp.json written and read back, ${VAR} expansion failing loudly, and a literal token caught in review.
 
 What the exercise is meant to teach:
 
@@ -62,7 +62,7 @@ What the exercise is meant to teach:
 
 `ex_2_5_trace_function.py` · Intermediate · about 30 minutes
 
-Running it shows a grep that misses the call sites because of a rename, and the alias chain followed to the end.
+Running it shows a real temp repo searched with real grep and glob, and the alias chain followed to the call sites a name search misses.
 
 What the exercise is meant to teach:
 

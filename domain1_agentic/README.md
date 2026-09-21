@@ -8,7 +8,7 @@ Run them all with `python ../run_all.py 1`.
 
 `ex_1_1_agent_loop.py` · Intermediate · about 45 minutes
 
-Running it shows the loop ends on end_turn, and two tool calls in one reply come back as two results in one user turn.
+Running it shows the loop ends on end_turn, and two tool calls in one reply come back as two tool_result blocks in one user turn.
 
 What the exercise is meant to teach:
 
@@ -22,7 +22,7 @@ What the exercise is meant to teach:
 
 `ex_1_2_coordinator.py` · Intermediate · about 60 minutes
 
-Running it shows a decomposition by named source can never report geothermal; a decomposition by question finds it.
+Running it shows tool_choice forcing the plan into a schema, and a decomposition by named source that can never report geothermal.
 
 What the exercise is meant to teach:
 
@@ -36,7 +36,7 @@ What the exercise is meant to teach:
 
 `ex_1_3_context_passing.py` · Intermediate · about 50 minutes
 
-Running it shows a structured finding keeps its source and confidence, and an agent without the Task tool cannot delegate whatever its prompt says.
+Running it shows "Write the report." against a subagent prompt carrying goal, findings and output shape.
 
 What the exercise is meant to teach:
 
@@ -50,7 +50,7 @@ What the exercise is meant to teach:
 
 `ex_1_4_prerequisite_gate.py` · Advanced · about 60 minutes
 
-Running it shows five refund requests against the gates, and the six fields a handoff has to carry.
+Running it shows a refund blocked because identity was never verified, and a second blocked at the limit, on a run where the prompt alone did not hold.
 
 What the exercise is meant to teach:
 
@@ -64,7 +64,7 @@ What the exercise is meant to teach:
 
 `ex_1_5_hooks.py` · Advanced · about 60 minutes
 
-Running it shows a post-tool hook cutting 8 fields to 5 and masking a card number, and a pre-tool hook refusing a refund over the limit.
+Running it shows a PostToolUse hook cutting 8 fields to 5 and masking a card number, and a PreToolUse hook denying a refund over the limit.
 
 What the exercise is meant to teach:
 
@@ -78,7 +78,7 @@ What the exercise is meant to teach:
 
 `ex_1_6_multi_pass_review.py` · Advanced · about 60 minutes
 
-Running it shows one wide pass finds 2 defects, four narrow passes find 8, and only the fourth sees across files.
+Running it shows three per-file calls, then one call across their findings that catches the defect no single file contains.
 
 What the exercise is meant to teach:
 
@@ -92,7 +92,7 @@ What the exercise is meant to teach:
 
 `ex_1_7_sessions.py` · Intermediate · about 45 minutes
 
-Running it shows which of resume, fresh and fork each situation calls for.
+Running it shows resume, fork and fresh start, and the stale snapshot a resume carries with it.
 
 What the exercise is meant to teach:
 
