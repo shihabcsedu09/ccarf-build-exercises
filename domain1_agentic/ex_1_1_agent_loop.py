@@ -49,7 +49,7 @@ def agent(client, question):
                 output = TOOLS[block["name"]](**block["input"])
                 results.append({"type": "tool_result", "tool_use_id": block["id"],
                                 "content": json.dumps(output)})
-            except Exception as exc:                            # a failure is still a result
+            except Exception as exc:          # a failure is still a result
                 results.append({"type": "tool_result", "tool_use_id": block["id"],
                                 "content": json.dumps({"error": str(exc)}),
                                 "is_error": True})

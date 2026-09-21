@@ -98,7 +98,7 @@ everything below the stubs line exists only so the file runs on its own.
 | 5.2 | [Build an Escalation Decision Engine](domain5_context/ex_5_2_escalation.py) | five cases against the three real triggers, with frustration and self-reported confidence correctly ignored |
 | 5.3 | [Build a Structured Error Propagation System](domain5_context/ex_5_3_error_propagation.py) | a transient failure recovering, a permanent one reported with its 118 partial rows, and an empty result reported as success |
 | 5.4 | [Build a Context-Resilient Codebase Explorer](domain5_context/ex_5_4_context_resilience.py) | a crash-resume briefing rebuilt from a file, and 2400 lines of context saved by delegating |
-| 5.5 | [Build a Confidence-Calibrated Review Router](domain5_context/ex_5_5_calibrated_router.py) | 96% overall hiding a 60% segment, and the same 0.96 score routed two different ways |
+| 5.5 | [Build a Confidence-Calibrated Review Router](domain5_context/ex_5_5_calibrated_router.py) | 97% overall hiding a 60% segment, and the same 0.96 score routed two different ways |
 | 5.6 | [Build a Provenance-Preserving Synthesis Pipeline](domain5_context/ex_5_6_provenance.py) | attribution surviving a summarisation step, a conflict annotated with both dates, and an unsourced sentence cut |
 
 ## Where the briefs come from

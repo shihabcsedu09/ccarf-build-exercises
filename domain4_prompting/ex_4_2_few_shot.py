@@ -4,6 +4,8 @@ The model copies everything in an example, not only the part you meant.
 
 Run it:  python ex_4_2_few_shot.py
 """
+from pprint import pprint
+
 
 LEAKY = [      # three examples, one vendor, a purchase order every time
     {"vendor": "Northwind Supply", "po_number": "PO-2024-0113"},
@@ -38,8 +40,8 @@ def audit(examples):
 
 if __name__ == "__main__":
     for label, examples in (("leaky", LEAKY), ("good", GOOD)):
-        result = audit(examples)
-        print(f"{label:6} {result}")
+        print(f"{label}:")
+        pprint(audit(examples), width=72)
 
     print("\nThe leaky set shares a vendor name and always has a purchase order,")
     print("so the model copies both: Northwind appears on other vendors' invoices")

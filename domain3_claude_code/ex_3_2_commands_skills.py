@@ -5,6 +5,8 @@ team command needs a different name, or it shadows theirs.
 
 Run it:  python ex_3_2_commands_skills.py
 """
+from textwrap import fill, indent
+
 
 SKILL_FRONTMATTER = {
     "name": "case-review",
@@ -47,11 +49,14 @@ if __name__ == "__main__":
 
     team = ["release-notes", "commit"]
     for name in ("commit", "my-commit"):
-        print(f"\npersonal '{name}' shadows the team's: {shadows_team_command(name, team)}")
+        hit = shadows_team_command(name, team)
+        print(f"\npersonal '{name}' shadows the team's: {hit}")
 
     print("\nfrontmatter:")
     for k, v in SKILL_FRONTMATTER.items():
         print(f"  {k}: {v}")
     print()
-    for s in ("context: fork", "allowed-tools", "argument-hint", "disallowed-tools"):
-        print(f"  {s:18} {explain(s)}")
+    for s in ("context: fork", "allowed-tools", "argument-hint",
+              "disallowed-tools"):
+        print(f"  {s}")
+        print(indent(fill(explain(s), 70), "    "))

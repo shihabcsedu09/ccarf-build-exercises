@@ -4,6 +4,8 @@ A prompt asks. A gate makes the wrong order impossible.
 
 Run it:  python ex_1_4_prerequisite_gate.py
 """
+from pprint import pprint
+
 
 HANDOFF_FIELDS = ["customer_id", "verification", "issue_summary",
                   "actions_attempted", "root_cause", "recommended_action"]
@@ -58,15 +60,21 @@ if __name__ == "__main__":
         print(f"{label:24} -> {gate(s, 'process_refund', args)}")
 
     s.record("get_customer", {"verified": True, "customer_id": "CUS-1"})
-    print(f"{'verified, no order yet':24} -> {gate(s, 'process_refund', {'customer_id':'CUS-1','amount':50})}")
+    mine_50 = {"customer_id": "CUS-1", "amount": 50}
+    print(f"{'verified, no order yet':24} -> "
+          f"{gate(s, 'process_refund', mine_50)}")
 
-    s.record("lookup_order", {"refund_eligible": True, "refundable_amount": 40})
-    print(f"{'amount too high':24} -> {gate(s, 'process_refund', {'customer_id':'CUS-1','amount':50})}")
-    print(f"{'someone elses id':24} -> {gate(s, 'process_refund', {'customer_id':'CUS-9','amount':40})}")
-    print(f"{'within policy':24} -> {gate(s, 'process_refund', {'customer_id':'CUS-1','amount':40})}")
+    s.record("lookup_order", {"refund_eligible": True,
+                              "refundable_amount": 40})
+    later = [("amount too high", mine_50),
+             ("someone elses id", {"customer_id": "CUS-9", "amount": 40}),
+             ("within policy", {"customer_id": "CUS-1", "amount": 40})]
+    for label, args in later:
+        print(f"{label:24} -> {gate(s, 'process_refund', args)}")
 
-    print("\nhandoff:", handoff(customer_id="CUS-1", verification="email, 10:42",
-                                issue_summary="damaged item",
-                                actions_attempted=["get_customer", "lookup_order"],
-                                root_cause="item damaged in transit",
-                                recommended_action="refund 40.00"))
+    print("\nhandoff:")
+    pprint(handoff(customer_id="CUS-1", verification="email, 10:42",
+                   issue_summary="damaged item",
+                   actions_attempted=["get_customer", "lookup_order"],
+                   root_cause="item damaged in transit",
+                   recommended_action="refund 40.00"), width=74)

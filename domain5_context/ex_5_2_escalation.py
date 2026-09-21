@@ -6,6 +6,8 @@ confidence are not triggers.
 
 Run it:  python ex_5_2_escalation.py
 """
+from pprint import pprint
+
 
 MAX_ATTEMPTS = 3
 
@@ -51,4 +53,5 @@ if __name__ == "__main__":
     print("better outcome. A confidence number is not evidence either.\n")
 
     for cands in ([{"id": 1}], [{"id": 1}, {"id": 2}], []):
-        print(f"{len(cands)} match(es) ->", match_customer(cands))
+        print(f"{len(cands)} match(es) ->")
+        pprint(match_customer(cands), width=74)

@@ -64,7 +64,8 @@ if __name__ == "__main__":
     required_schema = json.loads(json.dumps(SCHEMA))
     required_schema["input_schema"]["properties"]["po_number"]["type"] = "string"
     required_schema["input_schema"]["required"].append("po_number")
-    print("same, but required ->", what_the_model_does(required_schema, "po_number", None))
+    print("same, but required ->",
+          what_the_model_does(required_schema, "po_number", None))
 
     print("\ntool_choice, type known  :", tool_choice(True))
     print("tool_choice, type unknown:", tool_choice(False))

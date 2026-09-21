@@ -9,6 +9,7 @@ Run it:  python ex_1_3_context_passing.py
 COORDINATOR_TOOLS = ["Task", "Read", "Grep"]     # no Task means nothing is delegated
 
 
+# ---------------------------------------------------------------- START HERE
 def finding(claim, url, document, published, excerpt):
     """Content and attribution stay in separate fields, so a paraphrase
     downstream cannot silently drop the source."""
@@ -16,7 +17,6 @@ def finding(claim, url, document, published, excerpt):
             "published": published, "excerpt": excerpt}
 
 
-# ---------------------------------------------------------------- START HERE
 def writer_prompt(topic, findings):
     """Build the prompt the writer subagent receives. It has seen nothing else."""
     lines = [f"Topic: {topic}", "", "Findings you may use, and nothing else:"]

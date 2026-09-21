@@ -5,6 +5,8 @@ comes up often: deadline minus the window is your submission interval.
 
 Run it:  python ex_4_5_batching.py
 """
+from pprint import pprint
+
 
 BATCH_WINDOW_HOURS = 24
 
@@ -55,11 +57,13 @@ if __name__ == "__main__":
     print(f"\na 36-hour promise -> submit every {max_interval_hours(36)} hours at most")
     print(f"a 30-hour promise -> submit every {max_interval_hours(30)} hours at most")
 
-    print("\nrequests:", build_requests([{"id": 1, "text": "..."},
-                                         {"id": 2, "text": "..."}]))
+    print("\nrequests:")
+    pprint(build_requests([{"id": 1, "text": "..."},
+                           {"id": 2, "text": "..."}]), width=74)
     results = [{"custom_id": "doc-1", "type": "succeeded"},
                {"custom_id": "doc-2", "type": "errored", "error": "overloaded_error"},
-               {"custom_id": "doc-3", "type": "errored", "error": "invalid_request_error"}]
+               {"custom_id": "doc-3", "type": "errored",
+                "error": "invalid_request_error"}]
     ok, retry, dead = triage(results)
     print(f"\nok={ok} retry={retry} needs_chunking={dead}")
     print("Resubmitting the whole batch would pay again for doc-1.")

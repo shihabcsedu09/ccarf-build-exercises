@@ -45,7 +45,8 @@ def read_result(envelope):
 
 
 if __name__ == "__main__":
-    print(" ".join(build_command("prompts/review.md", ".github/schema.json")))
+    for part in build_command("prompts/review.md", ".github/schema.json"):
+        print("   ", part)
 
     print("\npermission checks:")
     for tool in ("Read", "Grep", "Edit", "Bash(git push --force)"):
@@ -57,4 +58,5 @@ if __name__ == "__main__":
                 {"is_error": False, "num_turns": 30,
                  "structured_output": {"findings": [1]}},
                 {"is_error": True, "num_turns": 4}):
-        print(f"  turns={env['num_turns']:<3} error={str(env['is_error']):5} -> {read_result(env)}")
+        head = f"turns={env['num_turns']:<3} error={str(env['is_error']):5}"
+        print(f"  {head} -> {read_result(env)}")

@@ -44,7 +44,8 @@ if __name__ == "__main__":
         ("a domain you do not know",   False, False, False, True),
     ]
     for label, known, misread, interact, unfamiliar in cases:
-        print(f"{label:34} -> {technique(known, misread, interact, unfamiliar)}")
+        answer = technique(known, misread, interact, unfamiliar)
+        print(f"{label:34}\n    -> {answer}")
 
     print("\n--- showing beats describing ---\n" + EXAMPLE_PAIR)
     print("\n--- interacting problems go in one message ---\n" + INTERACTING)

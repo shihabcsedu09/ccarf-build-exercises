@@ -64,7 +64,7 @@ What the exercise is meant to teach:
 
 `ex_5_5_calibrated_router.py` · Advanced · about 50 minutes
 
-Running it shows 96% overall hiding a 60% segment, and the same 0.96 score routed two different ways.
+Running it shows 97% overall hiding a 60% segment, and the same 0.96 score routed two different ways.
 
 What the exercise is meant to teach:
 

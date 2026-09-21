@@ -20,9 +20,9 @@ def choose(total_files, changed_files, comparing_two_designs=False):
 
 
 def resume_prompt(changed):
-    return ("These files changed since this session was saved. Re-read them "
-            "before using anything you remember about them:\n"
-            + "\n".join(f"- {p}" for p in changed))
+    head = ("These files changed since this session was saved. Re-read\n"
+            "them before using anything you remember about them:")
+    return head + "\n" + "\n".join(f"  - {p}" for p in changed)
 
 
 def fresh_prompt(findings, still_valid, now_stale):

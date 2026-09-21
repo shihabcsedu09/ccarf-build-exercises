@@ -5,6 +5,8 @@ being attempted, what was already gathered, and what to try instead.
 
 Run it:  python ex_5_3_error_propagation.py
 """
+from pprint import pprint
+
 
 TRANSIENT = ("timeout", "connection_reset", "rate_limited")
 
@@ -59,6 +61,7 @@ if __name__ == "__main__":
             ["ask for read access", "use last night's export"]).items():
         print(f"  {k}: {v}")
 
-    print("\nempty but fine     :", empty_result("invoices from 2019"))
+    print("\nempty but fine:")
+    pprint(empty_result("invoices from 2019"), width=74)
     print("\nSilently swallowing the first one would have the agent report")
     print("a total that is missing 118 rows and say nothing about it.")

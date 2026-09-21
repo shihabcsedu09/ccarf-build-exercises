@@ -5,6 +5,8 @@ No retry finds a fact the document never had.
 
 Run it:  python ex_4_4_validation_retry.py
 """
+from pprint import pprint
+
 from decimal import Decimal
 
 MAX_RETRIES = 2
@@ -77,10 +79,12 @@ def correct(prompt):
 
 if __name__ == "__main__":
     first = extract(DOC_OK)
-    print("first attempt errors:", validate(first, DOC_OK))
+    print("first attempt errors:")
+    pprint(validate(first, DOC_OK), width=74)
 
     result = extract_with_retry(DOC_OK, extract, correct)
     print("after retry         :", result["status"], "in", result["attempts"], "retry")
 
-    print("\nmissing source      :", extract_with_retry(DOC_MISSING, extract, correct))
+    print("\nmissing source:")
+    pprint(extract_with_retry(DOC_MISSING, extract, correct), width=74)
     print("\nRetrying that second one would produce a plausible invented date.")

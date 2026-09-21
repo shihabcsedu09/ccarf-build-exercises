@@ -12,11 +12,12 @@ from collections import defaultdict
 BAND = 0.05
 
 
-# ---------------------------------------------------------------- START HERE
 def band(confidence):
+    """Round a score into a 0.05 bucket, so bands have enough rows."""
     return round(round(confidence / BAND) * BAND, 2)
 
 
+# ---------------------------------------------------------------- START HERE
 def accuracy_by_segment(rows):
     """Break the number down by document type, then by type and field."""
     b = defaultdict(lambda: [0, 0])
@@ -62,9 +63,9 @@ def sample_for_audit(rows, rate=0.02, seed=0):
 
 if __name__ == "__main__":
     rows = ([{"doc_type": "typed_invoice", "field": "total",
-              "confidence": 0.96, "correct": True}] * 900 +
+              "confidence": 0.96, "correct": True}] * 925 +
             [{"doc_type": "handwritten", "field": "total",
-              "confidence": 0.96, "correct": i < 60} for i in range(100)])
+              "confidence": 0.96, "correct": i < 45} for i in range(75)])
 
     seg = accuracy_by_segment(rows)
     overall = sum(r["correct"] for r in rows) / len(rows)

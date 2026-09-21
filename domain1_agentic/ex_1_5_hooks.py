@@ -4,6 +4,8 @@ PostToolUse tidies what Claude is about to read. PreToolUse forbids.
 
 Run it:  python ex_1_5_hooks.py
 """
+from pprint import pprint
+
 from datetime import datetime, timezone
 
 STATUS = {1: "pending", 2: "shipped", 3: "delivered", 4: "returned"}
@@ -48,13 +50,16 @@ def pre_tool_use(tool, args):
 
 if __name__ == "__main__":
     raw = {"order_id": "8891", "order_date": 1767225600, "status": 2,
-           "amount": 240.0, "return_eligible": True, "card_number": "4111111111111111",
+           "amount": 240.0, "return_eligible": True,
+           "card_number": "4111111111111111",
            "warehouse_route": "LHR-3", "carrier_telemetry": {"scans": 12}}
     print("before:", len(raw), "fields")
     clean = post_tool_use("lookup_order", raw)
-    print("after :", len(clean), "fields ->", clean)
+    print("after :", len(clean), "fields ->")
+    pprint(clean, width=74)
 
-    print("\nrefund 400 ->", pre_tool_use("process_refund", {"amount": 400}) or "allowed")
+    print("\nrefund 400 ->",
+          pre_tool_use("process_refund", {"amount": 400}) or "allowed")
     print("refund 900 ->", pre_tool_use("process_refund", {"amount": 900}))
     print("\nA PostToolUse hook could not have stopped the 900: by the time it")
     print("runs, the money has already moved.")

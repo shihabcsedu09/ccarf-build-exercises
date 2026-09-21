@@ -10,9 +10,12 @@ import fnmatch, re
 # A tiny fake repository: path -> contents
 REPO = {
     "src/legacy/orders.ts":   "export function processLegacyOrder(o) { return o }",
-    "src/legacy/index.ts":    "export { processLegacyOrder as submitOrder } from './orders'",
-    "src/checkout/submit.ts": "import { submitOrder } from '../legacy'\nsubmitOrder(cart)",
-    "src/billing/recon.ts":   "import { processLegacyOrder } from '../legacy/orders'\nprocessLegacyOrder(x)",
+    "src/legacy/index.ts":    ("export { processLegacyOrder as submitOrder }"
+                               " from './orders'"),
+    "src/checkout/submit.ts": ("import { submitOrder } from '../legacy'"
+                               "\nsubmitOrder(cart)"),
+    "src/billing/recon.ts":   ("import { processLegacyOrder } from "
+                               "'../legacy/orders'\nprocessLegacyOrder(x)"),
     "src/checkout/submit.test.ts": "it('submits', () => { /* via the module */ })",
     "docs/legacy.md":         "processLegacyOrder is deprecated",
 }
@@ -49,7 +52,8 @@ def trace(symbol):
 
 
 if __name__ == "__main__":
-    print("Glob for the function name:", glob_files("**/*processLegacyOrder*") or "nothing")
+    print("Glob for the function name:",
+          glob_files("**/*processLegacyOrder*") or "nothing")
     print("  a function name is not a file name, which is why Glob finds nothing\n")
 
     names, callers = trace("processLegacyOrder")

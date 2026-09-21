@@ -5,6 +5,8 @@ that disagree are reported as two, with their dates.
 
 Run it:  python ex_5_6_provenance.py
 """
+from pprint import pprint
+
 
 
 # ---------------------------------------------------------------- START HERE
@@ -65,7 +67,7 @@ if __name__ == "__main__":
 
     print("\nreconciled:")
     for r in reconcile(sourced):
-        print("  ", r)
+        pprint(r, width=72)
 
     draft = ["EU market share reached 15%", "Growth is expected to continue"]
     print("\nno source, so it is cut:", unsupported(draft, sourced))
