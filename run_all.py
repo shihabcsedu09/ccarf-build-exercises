@@ -5,7 +5,9 @@
     python run_all.py 3          # run domain 3 only
     python run_all.py 3.4        # run one exercise
 
-Nothing here needs an API key. Every exercise ships its own stub data.
+Without ANTHROPIC_API_KEY every exercise replays a recorded reply, so this
+runs offline, free and identically every time. Set the key and the same
+files make real calls. Needs the anthropic package either way.
 """
 import pathlib
 import subprocess

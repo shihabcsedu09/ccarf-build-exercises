@@ -1,89 +1,126 @@
-"""5.5 Build a confidence-calibrated review router.
+"""5.5 Route work to reviewers on a number that means something.
 
-An aggregate accuracy number hides the segment that is failing, and a raw
-confidence score means nothing until it has been checked against outcomes.
-Calibrate per segment, then route on the calibrated number.
+Real scenario: extraction is "97% accurate" and leadership wants to stop
+reviewing anything the model is confident about. Reviewers can check 500 of
+4,000 documents a day, and today every tenth one is sampled at random.
 
-Run it:  python ex_5_5_calibrated_router.py
+97% is an average. Averages hide the document type that is wrong four times
+in ten. And a confidence score means nothing until it has been checked
+against labelled data.
+
+Segment, calibrate, route, then keep sampling what you automated.
+
+Run it:
+    python ex_5_5_calibrated_router.py
 """
+import pathlib
 import random
-from collections import defaultdict
+import sys
 
-BAND = 0.05
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from claude_helpers import banner
 
-
-def band(confidence):
-    """Round a score into a 0.05 bucket, so bands have enough rows."""
-    return round(round(confidence / BAND) * BAND, 2)
+# A labelled set: what the model said, how sure it said it was, and the truth.
+# Read the handwritten rows carefully: the wrong ones are just as confident as
+# the right ones. That is what an uncalibrated score looks like, and no
+# threshold can rescue it.
+LABELLED = (
+    [{"type": "typed_invoice", "confidence": 0.97, "correct": True}] * 570
+    + [{"type": "typed_invoice", "confidence": 0.80, "correct": False}] * 6
+    + [{"type": "scanned_receipt", "confidence": 0.97, "correct": True}] * 240
+    + [{"type": "scanned_receipt", "confidence": 0.85, "correct": False}] * 24
+    + [{"type": "handwritten", "confidence": 0.98, "correct": True}] * 96
+    + [{"type": "handwritten", "confidence": 0.98, "correct": False}] * 64
+)
 
 
 # ---------------------------------------------------------------- START HERE
-def accuracy_by_segment(rows):
-    """Break the number down by document type, then by type and field."""
-    b = defaultdict(lambda: [0, 0])
+def overall_accuracy(rows):
+    """The number that gets quoted, and the one that hides the problem."""
+    return sum(1 for r in rows if r["correct"]) / float(len(rows))
+
+
+def accuracy_by_type(rows):
+    """Segment first. This is the step that makes the average honest."""
+    out = {}
     for r in rows:
-        for key in ((r["doc_type"],), (r["doc_type"], r["field"])):
-            b[key][1] += 1
-            b[key][0] += int(r["correct"])
-    return {k: (hits / n, n) for k, (hits, n) in b.items()}
+        bucket = out.setdefault(r["type"], [0, 0])
+        bucket[1] += 1
+        if r["correct"]:
+            bucket[0] += 1
+    return dict((k, v[0] / float(v[1])) for k, v in out.items())
 
 
-def calibrate(rows, by_segment=True):
-    """What a reported score has actually meant. Keyed by (segment, band)
-    when by_segment, otherwise by band alone."""
-    b = defaultdict(lambda: [0, 0])
-    for r in rows:
-        key = (r["doc_type"], band(r["confidence"])) if by_segment \
-            else band(r["confidence"])
-        b[key][1] += 1
-        b[key][0] += int(r["correct"])
-    return {k: (hits / n, n) for k, (hits, n) in b.items()}
+def calibrate(rows, target_accuracy=0.99):
+    """Does 'confident' mean 'right' for this document type?
+
+    A threshold is only meaningful once you have checked what the score
+    predicts, per segment. Types that cannot reach the target do not get one.
+    """
+    thresholds = {}
+    for doc_type in set(r["type"] for r in rows):
+        segment = [r for r in rows if r["type"] == doc_type]
+        best = None
+        for cut in [0.90, 0.92, 0.94, 0.95, 0.96, 0.98, 0.99]:
+            above = [r for r in segment if r["confidence"] >= cut]
+            if not above:
+                continue
+            if sum(1 for r in above if r["correct"]) / float(len(above)) >= target_accuracy:
+                best = cut
+                break
+        thresholds[doc_type] = best        # None means: never automate this type
+    return thresholds
 
 
-def route(doc_type, confidence, calibration, min_rows=30,
-          auto_at=0.95, spot_at=0.75):
-    key = (doc_type, band(confidence))
-    entry = calibration.get(key) or calibration.get(band(confidence))
-    if entry is None or entry[1] < min_rows:
-        return "human review (not enough labelled rows to trust this band)"
-    real, _ = entry
-    if real >= auto_at:
-        return f"auto-accept (this band has run {real:.0%})"
-    if real >= spot_at:
-        return f"spot check (this band has run {real:.0%})"
-    return f"human review (this band has run {real:.0%})"
+def route(document, thresholds, sample_rate=0.05, rng=random):
+    """Three ways to a reviewer, and only one of them is the threshold."""
+    cut = thresholds.get(document["type"])
 
-
-def sample_for_audit(rows, rate=0.02, seed=0):
-    """High-confidence rows are sampled on purpose. They are the ones nobody
-    would otherwise ever look at again."""
-    rnd = random.Random(seed)
-    return [r for r in rows if rnd.random() < rate]
+    if document.get("ambiguous_source"):
+        # A contradictory or unreadable source is a reason on its own, whatever
+        # the score says.
+        return "human: source is ambiguous"
+    if cut is None:
+        return "human: this type has never met the accuracy bar"
+    if document["confidence"] < cut:
+        return "human: below the calibrated threshold for its type"
+    if rng.random() < sample_rate:
+        # Keep measuring the part you automated, or a new failure pattern
+        # arrives invisibly.
+        return "auto, sampled for audit"
+    return "auto"
 
 
 if __name__ == "__main__":
-    rows = ([{"doc_type": "typed_invoice", "field": "total",
-              "confidence": 0.96, "correct": True}] * 925 +
-            [{"doc_type": "handwritten", "field": "total",
-              "confidence": 0.96, "correct": i < 45} for i in range(75)])
+    banner("5.5 calibrated routing", api=False)
+    print("the number in the slide deck: %.1f%% accurate" % (overall_accuracy(LABELLED) * 100))
+    print()
+    print("the same set, split by document type:")
+    for doc_type, acc in sorted(accuracy_by_type(LABELLED).items()):
+        print("   %-18s %.1f%%" % (doc_type, acc * 100))
+    print("   handwritten is wrong 4 times in 10 and the average never showed it.")
+    print()
 
-    seg = accuracy_by_segment(rows)
-    overall = sum(r["correct"] for r in rows) / len(rows)
-    print(f"overall            : {overall:.0%}   <- the number on the dashboard")
-    print("typed invoices     : {:.0%} over {} rows".format(*seg[("typed_invoice",)]))
-    print("handwritten        : {:.0%} over {} rows".format(*seg[("handwritten",)]))
+    thresholds = calibrate(LABELLED)
+    print("calibrated thresholds, per type:")
+    for doc_type, cut in sorted(thresholds.items()):
+        print("   %-18s %s" % (doc_type, ("%.2f" % cut) if cut else "no threshold reaches 99%"))
+    print()
 
-    pooled = calibrate(rows, by_segment=False)
-    per_seg = calibrate(rows, by_segment=True)
-
-    print(f"\nboth document types report 0.96 confidence.")
-    print("routed on the pooled curve:")
-    print("  typed       ->", route("typed_invoice", 0.96, pooled))
-    print("  handwritten ->", route("handwritten", 0.96, pooled))
-    print("routed on the per-segment curve:")
-    print("  typed       ->", route("typed_invoice", 0.96, per_seg))
-    print("  handwritten ->", route("handwritten", 0.96, per_seg))
-
-    print("\nunseen segment     ->", route("receipt_photo", 0.96, per_seg))
-    audit = sample_for_audit(rows)
-    print(f"audit sample       : {len(audit)} rows, high-confidence included")
+    rng = random.Random(7)
+    incoming = [
+        {"type": "typed_invoice", "confidence": 0.99},
+        {"type": "typed_invoice", "confidence": 0.84},
+        {"type": "scanned_receipt", "confidence": 0.99},
+        {"type": "handwritten", "confidence": 0.99},
+        {"type": "typed_invoice", "confidence": 0.99, "ambiguous_source": True},
+    ]
+    print("routing decisions:")
+    for doc in incoming:
+        print("   %-16s conf %.2f  %s%s"
+              % (doc["type"], doc["confidence"],
+                 route(doc, thresholds, rng=rng),
+                 "  (contradictory scan)" if doc.get("ambiguous_source") else ""))
+    print()
+    print("A handwritten document at 0.99 still goes to a person, because on")
+    print("that type the score has never predicted correctness.")

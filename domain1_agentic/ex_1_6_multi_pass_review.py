@@ -1,66 +1,119 @@
-"""1.6 Build a multi-pass code review pipeline.
+"""1.6 Split a big job into passes.
 
-One pass per file gives consistent depth. A second pass over the
-findings catches what only exists between files.
+Real scenario: the CI reviewer from the exam. A pull request touches fourteen
+files. Reviewed in one call, the feedback is detailed on the first files and
+thin on the last, and the same pattern gets flagged in one file and approved
+in another.
 
-Run it:  python ex_1_6_multi_pass_review.py
+Fix: one call per file, then one call that only looks across files. Each call
+has a small job and gives it full attention.
+
+Run it:
+    python ex_1_6_multi_pass_review.py                     offline
+    ANTHROPIC_API_KEY=sk-... python ex_1_6_multi_pass_review.py    real calls
 """
+import json
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from claude_helpers import MODEL, banner, call, get_client, recorded
+
+FINDINGS_TOOL = {
+    "name": "report_findings",
+    "description": "Report review findings for what you were shown.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "findings": {"type": "array", "items": {
+                "type": "object",
+                "properties": {"file": {"type": "string"},
+                               "line": {"type": "integer"},
+                               "severity": {"type": "string",
+                                            "enum": ["critical", "high", "medium", "low"]},
+                               "issue": {"type": "string"}},
+                "required": ["file", "line", "severity", "issue"]}}
+        },
+        "required": ["findings"],
+    },
+}
+
+PER_FILE_SYSTEM = (
+    "Review one file. Report only defects in the lines shown: correctness, "
+    "security, data loss. Do not comment on style or on code you cannot see."
+)
+CROSS_FILE_SYSTEM = (
+    "You are given per-file findings and the list of files in one change. "
+    "Report only issues that span files: data flow, contracts that no longer "
+    "match, duplicated logic. Do not repeat the per-file findings."
+)
 
 
 # ---------------------------------------------------------------- START HERE
-def review_pull_request(files, review_one, review_across):
-    """files: {path: diff}. Returns per-file findings plus cross-file ones."""
+def review(client, files):
+    """One focused call per file, then one call about how they fit together."""
     per_file = []
-    summaries = {}
-    for path, diff in files.items():          # independent: safe to run in parallel
-        per_file += review_one(path, diff)
-        summaries[path] = one_line(path, diff)
+    for path, diff in files:
+        reply = client.messages.create(
+            model=MODEL, max_tokens=1024,
+            system=PER_FILE_SYSTEM,
+            tools=[FINDINGS_TOOL],
+            tool_choice={"type": "tool", "name": "report_findings"},
+            messages=[{"role": "user", "content": "File: %s\n%s" % (path, diff)}])
+        for block in reply.content:
+            if block.type == "tool_use":
+                per_file.extend(block.input["findings"])
 
-    cross = review_across(summaries, per_file)
-    return per_file + cross
+    # The integration pass. It reads the findings, not the files, so it stays
+    # small however many files the change touched.
+    reply = client.messages.create(
+        model=MODEL, max_tokens=1024,
+        system=CROSS_FILE_SYSTEM,
+        tools=[FINDINGS_TOOL],
+        tool_choice={"type": "tool", "name": "report_findings"},
+        messages=[{"role": "user", "content": json.dumps(
+            {"files": [p for p, _ in files], "per_file_findings": per_file})}])
+    cross = []
+    for block in reply.content:
+        if block.type == "tool_use":
+            cross = block.input["findings"]
+
+    return {"per_file": per_file, "cross_file": cross}
 
 
-def one_line(path, diff):
-    return f"{path}: {len(diff.splitlines())} changed lines"
+# ---------------------------------------------------------------- recorded replies
+FILES = [("orders/total.py", "@@ def total(items): return sum(i.price for i in items)"),
+         ("orders/api.py", "@@ def post_order(body): return save(body)"),
+         ("orders/tests/test_total.py", "@@ assert total([]) == 0")]
 
 
-# ---------------------------------------------------------------- stubs
-def review_one(path, diff):
-    if "def " in diff and "test" not in path:
-        return [{"file": path, "kind": "local", "message": "new branch has no test"}]
-    return []
+def finding(path, line, severity, issue):
+    return {"file": path, "line": line, "severity": severity, "issue": issue}
 
 
-def review_across(summaries, per_file):
-    signatures = [f for f in summaries if "api.py" in f]
-    callers = [f for f in summaries if "client.py" in f]
-    if signatures and callers:
-        return [{"file": callers[0], "kind": "cross",
-                 "message": "api.py changed its signature; client.py was not updated"}]
-    return []
-
-
-def single_pass(files, review_one):
-    """What one review of everything at once tends to produce: thorough on the
-    first file, thin afterwards, and blind to anything spanning files."""
-    findings = []
-    for i, (path, diff) in enumerate(files.items()):
-        if i < 2:
-            findings += review_one(path, diff)
-    return findings
-
+SCRIPT = [
+    recorded(call("t1", "report_findings", findings=[
+        finding("orders/total.py", 2, "high", "no rounding, so cents drift on large carts")])),
+    recorded(call("t2", "report_findings", findings=[
+        finding("orders/api.py", 1, "critical", "request body is saved without validation")])),
+    recorded(call("t3", "report_findings", findings=[])),
+    recorded(call("t4", "report_findings", findings=[
+        finding("orders/api.py", 1, "high",
+                "api.py saves a body that total.py later assumes is validated")])),
+]
 
 if __name__ == "__main__":
-    files = {f"src/mod{i}.py": "def f():\n    pass\n" for i in range(1, 6)}
-    files["src/api.py"] = "def send(a, b):\n    pass\n"
-    files["src/client.py"] = "def call():\n    pass\n"
+    banner("1.6 per-file passes, then one pass across files")
+    out = review(get_client(SCRIPT), FILES)
 
-    one = single_pass(files, review_one)
-    many = review_pull_request(files, review_one, review_across)
-    print(f"single pass : {len(one)} findings, cross-file: "
-          f"{sum(1 for f in one if f['kind']=='cross')}")
-    print(f"multi pass  : {len(many)} findings, cross-file: "
-          f"{sum(1 for f in many if f['kind']=='cross')}")
-    for f in many:
-        if f["kind"] == "cross":
-            print("  the pass across files found:", f["message"])
+    print("per-file findings (%d calls, one per file):" % len(FILES))
+    for f in out["per_file"]:
+        print("   %-28s line %-3d %-8s %s" % (f["file"], f["line"], f["severity"], f["issue"]))
+    print()
+    print("cross-file findings (1 call, reading the findings not the files):")
+    for f in out["cross_file"]:
+        print("   %-28s line %-3d %-8s %s" % (f["file"], f["line"], f["severity"], f["issue"]))
+    print()
+    print("The last finding needed two files at once, so no per-file pass could")
+    print("have seen it. That is why the integration pass exists, and why")
+    print("asking developers to split the pull request would have hidden it.")

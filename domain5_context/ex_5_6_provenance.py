@@ -1,73 +1,150 @@
-"""5.6 Build a provenance-preserving synthesis pipeline.
+"""5.6 Carry the source with the claim, all the way through.
 
-Every claim keeps its source through every summarisation step. Two sources
-that disagree are reported as two, with their dates.
+Real scenario: the final report says "industry sources estimate 30% adoption"
+with nothing attached. The searcher had the survey name. Each step summarised
+the step before it in prose, and the attribution fell out somewhere in the
+middle.
 
-Run it:  python ex_5_6_provenance.py
+Citations cannot be reconstructed at the end. They travel as fields, or they
+are gone.
+
+And when two good sources disagree, report both with their dates. Often the
+disagreement is two years, not a contradiction.
+
+Run it:
+    python ex_5_6_provenance.py
 """
-from pprint import pprint
+import json
+import pathlib
+import sys
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from claude_helpers import MODEL, banner, get_client, recorded, say
+
+FINDINGS = [
+    {"claim": "Streaming revenue grew 12.1% in 2025",
+     "source_url": "https://www.ifpi.org/global-report-2026",
+     "document": "IFPI Global Music Report 2026",
+     "excerpt": "streaming revenue grew 12.1% year on year",
+     "published": "2026-03-01", "confidence": "well-established"},
+    {"claim": "The market was worth 4bn",
+     "source_url": "https://example.gov/report-2019",
+     "document": "Government market review",
+     "excerpt": "the sector is valued at 4bn",
+     "published": "2019-06-01", "confidence": "single-source"},
+    {"claim": "The market was worth 9bn",
+     "source_url": "https://example.org/industry-2026",
+     "document": "Industry analysis 2026",
+     "excerpt": "we size the market at 9bn",
+     "published": "2026-03-01", "confidence": "single-source"},
+]
+
+REQUIRED_FIELDS = ("claim", "source_url", "document", "excerpt", "published")
 
 
 # ---------------------------------------------------------------- START HERE
-def claim(text, url, document, excerpt, published):
-    return {"claim": text, "source_url": url, "document": document,
-            "excerpt": excerpt, "published": published}
+def summarise_as_prose(findings):
+    """What every step used to do. Readable, and the receipts are gone."""
+    return " ".join(f["claim"] + "." for f in findings)
 
 
-def summarise(claims):
-    """The summary step that usually loses attribution. Here the claim and
-    its source move together, so there is nothing to lose."""
-    return [{"claim": c["claim"], "source_url": c["source_url"],
-             "published": c["published"]} for c in claims]
+def summarise_keeping_fields(findings):
+    """Compress the wording, keep the fields. Shorter, still attributable."""
+    return [{"claim": f["claim"][:60], "source_url": f["source_url"],
+             "document": f["document"], "published": f["published"],
+             "confidence": f["confidence"]} for f in findings]
 
 
-def reconcile(claims):
-    """Same question, different answers. Annotate both, newest first."""
-    by_topic = {}
-    for c in claims:
-        by_topic.setdefault(c["topic"], []).append(c)
-    out = []
-    for topic, group in by_topic.items():
-        group.sort(key=lambda c: c["published"], reverse=True)
-        if len(group) == 1:
-            out.append({"topic": topic, "value": group[0]["claim"],
-                        "sources": [group[0]["source_url"]]})
-        else:
-            out.append({"topic": topic, "conflict": True,
-                        "values": [(c["claim"], c["published"],
-                                    c["source_url"]) for c in group],
-                        "reading": "later figure may be a trend, not a "
-                                   "contradiction"})
-    return out
+def attribution_survives(records):
+    """The check worth running after every hop, not at the end."""
+    if isinstance(records, str):
+        return False, "prose: no fields left to check"
+    missing = [f for f in ("source_url", "document", "published")
+               if any(f not in r for r in records)]
+    return (not missing), ("missing %s" % missing if missing else "intact")
 
 
-def unsupported(draft_claims, sourced):
-    """A sentence with no source does not go in the report."""
-    known = {c["claim"] for c in sourced}
-    return [c for c in draft_claims if c not in known]
+def find_conflicts(findings):
+    """Two sources, one metric, different numbers. Keep both, with the dates."""
+    conflicts = []
+    market = [f for f in findings if "market was worth" in f["claim"]]
+    if len(market) > 1:
+        conflicts.append({
+            "metric": "market size",
+            "values": [{"value": f["claim"].split()[-1], "document": f["document"],
+                        "published": f["published"]} for f in market],
+            "note": ("published %s apart; likely growth over time rather than a "
+                     "contradiction. The coordinator decides, not this step."
+                     % _years_apart(market)),
+        })
+    return conflicts
 
+
+def _years_apart(items):
+    years = sorted(int(f["published"][:4]) for f in items)
+    return "%d years" % (years[-1] - years[0])
+
+
+def report_section(findings, conflicts):
+    """Numbers as a table, disagreements called out, nothing averaged."""
+    lines = ["| claim | source | published |", "|---|---|---|"]
+    for f in findings:
+        lines.append("| %s | %s | %s |" % (f["claim"], f["document"], f["published"]))
+    for c in conflicts:
+        lines.append("")
+        lines.append("Disagreement on %s: %s" % (c["metric"], c["note"]))
+        for v in c["values"]:
+            lines.append("  - %s (%s, %s)" % (v["value"], v["document"], v["published"]))
+    return "\n".join(lines)
+
+
+def synthesise(client, records):
+    """The writing step. It can only cite what the records still carry."""
+    reply = client.messages.create(
+        model=MODEL, max_tokens=500,
+        system=("Write two sentences from these findings. Cite the document and "
+                "date for every claim. If a finding has no source, say so rather "
+                "than writing the claim as fact."),
+        messages=[{"role": "user", "content": json.dumps(records)}])
+    return "".join(b.text for b in reply.content if b.type == "text")
+
+
+FROM_PROSE = [recorded(say(
+    "Streaming revenue grew 12.1% in 2025. I cannot attribute this claim: the "
+    "input carried no source or date."))]
+FROM_FIELDS = [recorded(say(
+    "Streaming revenue grew 12.1% in 2025 (IFPI Global Music Report 2026, "
+    "published 2026-03-01)."))]
 
 if __name__ == "__main__":
-    sourced = [
-        dict(claim("EU market share reached 12%", "https://a.example/q1",
-                   "Q1 market report", "share rose to 12% in Q1", "2026-04-02"),
-             topic="eu_share"),
-        dict(claim("EU market share reached 15%", "https://b.example/q3",
-                   "Q3 market report", "share stands at 15%", "2026-10-11"),
-             topic="eu_share"),
-        dict(claim("Regulation takes effect in 2027", "https://c.example/reg",
-                   "Directive brief", "applies from 1 Jan 2027", "2026-06-30"),
-             topic="regulation"),
-    ]
+    banner("5.6 provenance through the pipeline")
+    print("what each finding carries at the start: %s" % ", ".join(REQUIRED_FIELDS))
+    print()
 
-    print("after summarisation, each line still names its source:")
-    for c in summarise(sourced):
-        print("  -", c["claim"], "->", c["source_url"], c["published"])
+    prose = summarise_as_prose(FINDINGS)
+    ok, why = attribution_survives(prose)
+    print("hop 1 summarised as prose:")
+    print("  ", prose[:110])
+    print("   attribution intact:", ok, "-", why)
+    print()
 
-    print("\nreconciled:")
-    for r in reconcile(sourced):
-        pprint(r, width=72)
+    structured = summarise_keeping_fields(FINDINGS)
+    ok, why = attribution_survives(structured)
+    print("hop 1 summarised as fields:")
+    print("  ", json.dumps(structured[0]))
+    print("   attribution intact:", ok, "-", why)
+    print()
 
-    draft = ["EU market share reached 15%", "Growth is expected to continue"]
-    print("\nno source, so it is cut:", unsupported(draft, sourced))
+    print("what the writer produces from each:")
+    print("   from prose :", synthesise(get_client(FROM_PROSE), [{"claim": c} for c in
+                                        [f["claim"] for f in FINDINGS[:1]]]))
+    print("   from fields:", synthesise(get_client(FROM_FIELDS), structured[:1]))
+    print()
+
+    conflicts = find_conflicts(FINDINGS)
+    print("the report:")
+    print(report_section(FINDINGS[:1], conflicts))
+    print()
+    print("Neither figure was dropped and nothing was averaged. The reader can")
+    print("see that one number is from 2019 and the other from 2026, which is")
+    print("the fact that resolves the apparent contradiction.")

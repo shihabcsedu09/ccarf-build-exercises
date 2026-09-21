@@ -1,57 +1,96 @@
-"""5.2 Build an escalation decision engine.
+"""5.2 Decide when a person has to take over.
 
-Three triggers are real: the customer asked for a person, policy does not
-cover it, the agent cannot make progress. Sentiment and self-reported
-confidence are not triggers.
+Real scenario: the agent resolves 55% of cases at first contact against an 80%
+target. It escalates straightforward damage claims and tries to handle policy
+exceptions itself, which is the wrong way round.
 
-Run it:  python ex_5_2_escalation.py
+Three triggers, and two things that look like triggers and are not.
+
+Run it:
+    python ex_5_2_escalation.py
 """
-from pprint import pprint
+import pathlib
+import sys
 
-
-MAX_ATTEMPTS = 3
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from claude_helpers import banner
 
 
 # ---------------------------------------------------------------- START HERE
-def should_escalate(case):
-    """Returns (escalate, reason). Order matters: the explicit ask wins."""
-    if case.get("asked_for_human"):
-        return True, "customer asked for a person"
-    if case.get("policy_covers") is False:
-        return True, "no policy covers this request"
-    if case.get("attempts", 0) >= MAX_ATTEMPTS:
-        return True, f"no progress after {MAX_ATTEMPTS} attempts"
-    return False, "handle it"
+def escalation_reason(message, policy_covers, attempts, sentiment,
+                      self_reported_confidence):
+    """Return why this goes to a person, or None to keep working.
+
+    Note what is not consulted: sentiment, and the model's own confidence.
+    Both are available and both are the wrong signal.
+    """
+    if message.get("asks_for_human"):
+        # An explicit request outranks everything, including a case the agent
+        # could obviously solve. Investigating first is still not doing what
+        # was asked.
+        return "the customer asked for a person"
+
+    if not policy_covers:
+        # Nobody delegated this decision to the agent. A competitor price match
+        # when the policy only covers your own site is a decision, not a task.
+        return "the policy does not cover this case"
+
+    if attempts >= 2:
+        # Stuck means the same thing failing twice, not a case that feels hard.
+        return "two attempts have failed; hand over what was gathered"
+
+    return None
 
 
-def match_customer(candidates):
-    """Ambiguity is a question, not a guess. Picking one can refund a stranger."""
-    if len(candidates) == 1:
-        return {"action": "proceed", "customer": candidates[0]}
-    if not candidates:
-        return {"action": "ask", "question": "I could not find that account. "
-                                             "What email is it under?"}
-    return {"action": "ask",
-            "question": "I found more than one account with that name. "
-                        "Can you give me the order number?"}
+def multi_match_rule(matches):
+    """A lookup returning three John Smiths is not a decision to make alone."""
+    if len(matches) > 1:
+        return ("ask for one more identifier (email, phone or order number) "
+                "before any account-specific action")
+    return "proceed"
 
+
+NOT_TRIGGERS = [
+    ("the customer sounds angry",
+     "sentiment is a feeling, not a case property. A calm customer asking for a "
+     "policy exception still needs a human; a frustrated one with a routine "
+     "return does not."),
+    ("the model reports low confidence",
+     "that number is the miscalibrated signal itself. It was confident enough "
+     "to attempt the policy exception it should have escalated."),
+]
+
+CASES = [
+    ("routine replacement, photo evidence, customer calm",
+     dict(message={}, policy_covers=True, attempts=0, sentiment="neutral",
+          self_reported_confidence=0.9)),
+    ("'I want to speak to a human, do not try to fix this'",
+     dict(message={"asks_for_human": True}, policy_covers=True, attempts=0,
+          sentiment="neutral", self_reported_confidence=0.95)),
+    ("competitor price match; policy silent on competitors",
+     dict(message={}, policy_covers=False, attempts=0, sentiment="neutral",
+          self_reported_confidence=0.8)),
+    ("refund tool failed twice with the same error",
+     dict(message={}, policy_covers=True, attempts=2, sentiment="neutral",
+          self_reported_confidence=0.6)),
+    ("'This is the third time I have explained this. Ridiculous.'",
+     dict(message={}, policy_covers=True, attempts=0, sentiment="angry",
+          self_reported_confidence=0.9)),
+]
 
 if __name__ == "__main__":
-    cases = [
-        ("angry but fixable", {"frustrated": True, "policy_covers": True}),
-        ("angry and asked for a person",
-         {"frustrated": True, "asked_for_human": True, "policy_covers": True}),
-        ("calm, outside policy", {"frustrated": False, "policy_covers": False}),
-        ("tried three times", {"policy_covers": True, "attempts": 3}),
-        ("model says 0.4 confident", {"policy_covers": True, "confidence": 0.4}),
-    ]
-    for label, case in cases:
-        esc, why = should_escalate(case)
-        print(f"{label:30} {'ESCALATE' if esc else 'handle  '}  {why}")
-
-    print("\nFrustration alone is not a trigger; solving the problem is the")
-    print("better outcome. A confidence number is not evidence either.\n")
-
-    for cands in ([{"id": 1}], [{"id": 1}, {"id": 2}], []):
-        print(f"{len(cands)} match(es) ->")
-        pprint(match_customer(cands), width=74)
+    banner("5.2 escalation triggers", api=False)
+    for label, facts in CASES:
+        reason = escalation_reason(**facts)
+        print("%-52s %s" % (label[:50], reason or "keep working, resolve it"))
+    print()
+    print("the last one is the interesting case: acknowledge the frustration,")
+    print("resolve the return now, and escalate only if they ask for a person.")
+    print()
+    print("what is deliberately not in the function:")
+    for name, why in NOT_TRIGGERS:
+        print("   %s" % name)
+        print("      %s" % why)
+    print()
+    print("three matches for 'John Smith' ->", multi_match_rule(["a", "b", "c"]))
+    print("one match                      ->", multi_match_rule(["a"]))

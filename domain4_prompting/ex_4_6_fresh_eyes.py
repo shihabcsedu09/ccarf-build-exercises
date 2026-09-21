@@ -1,50 +1,104 @@
-"""4.6 Build a multi-pass review system.
+"""4.6 Review with an instance that never saw the reasoning.
 
-The session that wrote the code defends it. A separate one does not.
-And a confidence number means nothing until you check it.
+Real scenario: Claude writes a change, and asked to review it, approves it.
+The trace shows it considered the edge case during generation and decided its
+approach was fine. Asked again, it reaches the same conclusion, because the
+same justification is still in front of it.
 
-Run it:  python ex_4_6_fresh_eyes.py
+A second call with none of that history finds the bug, the way a colleague
+does.
+
+Run it:
+    python ex_4_6_fresh_eyes.py                     offline
+    ANTHROPIC_API_KEY=sk-... python ex_4_6_fresh_eyes.py    real calls
 """
-from collections import defaultdict
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from claude_helpers import MODEL, banner, get_client, recorded, say
+
+REVIEW_CRITERIA = """Report correctness, security and data-loss defects only.
+Skip style and naming. For each finding give the line and what goes wrong.
+If the code is correct, say so in one line."""
+
+CODE = '''def apply_discount(total, percent):
+    # percent is always 0-100 here
+    return total - (total * percent / 100)
+'''
 
 
 # ---------------------------------------------------------------- START HERE
-def review(diff, criteria, generator_reasoning=None):
-    """Pass generator_reasoning=None. Anything else is self-review."""
-    saw_its_own_reasoning = generator_reasoning is not None
-    defects = [d for d in diff["defects"]]
-    if saw_its_own_reasoning:
-        # it already decided these were acceptable while writing them
-        defects = [d for d in defects if d not in generator_reasoning["justified"]]
-    return defects
+def self_review(client, generation_history):
+    """The trap. The reviewer inherits every justification the author made."""
+    messages = list(generation_history) + [
+        {"role": "user", "content": "Now review what you wrote for bugs."}]
+    reply = client.messages.create(model=MODEL, max_tokens=600, messages=messages)
+    return "".join(b.text for b in reply.content if b.type == "text")
 
 
-def calibrate(labelled):
-    """Compare the model's confidence against known outcomes."""
-    buckets = defaultdict(lambda: [0, 0])
-    for row in labelled:
-        b = round(row["confidence"], 1)
-        buckets[b][1] += 1
-        buckets[b][0] += int(row["was_real"])
-    return {b: correct / total for b, (correct, total) in sorted(buckets.items())}
+def independent_review(client, code, criteria, existing_tests=""):
+    """A new call. It gets the code and the standard, and nothing else.
+
+    No generation history, so there is nothing to defend. Give it the tests
+    and any previous findings so it does not repeat what is already known.
+    """
+    content = "Review this code:\n\n%s" % code
+    if existing_tests:
+        content += "\n\nExisting tests:\n%s" % existing_tests
+    reply = client.messages.create(
+        model=MODEL, max_tokens=600,
+        system=criteria,                       # the standard, not the story
+        messages=[{"role": "user", "content": content}])
+    return "".join(b.text for b in reply.content if b.type == "text")
 
 
-def may_auto_post(confidence, calibration, threshold=0.9):
-    actual = calibration.get(round(confidence, 1))
-    return actual is not None and actual >= threshold
+WHAT_THE_REVIEWER_GETS = [
+    ("the code or output, as it stands", True),
+    ("the requirements and the review standard", True),
+    ("existing tests and previous findings", True),
+    ("the author's reasoning or justifications", False),
+    ("the conversation that produced the code", False),
+]
 
+# Three passes with a vote is not the same thing. It only keeps findings that
+# recur, and a subtle bug that one pass happens to notice is dropped as noise.
+VOTING_WARNING = (
+    "Running three passes and keeping findings that appear twice deletes the "
+    "rare real bug, which is the one you most wanted.")
+
+# ---------------------------------------------------------------- recorded replies
+GENERATION_HISTORY = [
+    {"role": "user", "content": "Write apply_discount."},
+    {"role": "assistant", "content":
+        "Here it is. I considered negative percentages and concluded the "
+        "caller guarantees 0-100, so a guard would be dead code."},
+]
+
+SELF = [recorded(say("Looks correct. The comment documents the precondition, "
+                     "and the caller guarantees the range, so no guard is needed."))]
+INDEPENDENT = [recorded(say(
+    "line 3: percent is not validated. A percent above 100 returns a negative "
+    "total, and a negative percent increases the charge. The comment asserts a "
+    "precondition that nothing enforces."))]
 
 if __name__ == "__main__":
-    diff = {"defects": ["removed guard", "off-by-one", "missing await"]}
-    reasoning = {"justified": ["removed guard"]}   # it thought that one was fine
+    banner("4.6 fresh eyes")
+    print("the code:")
+    print(CODE)
 
-    print("same session  :", review(diff, "criteria", reasoning))
-    print("fresh instance:", review(diff, "criteria"))
-
-    labelled = ([{"confidence": 0.9, "was_real": True}] * 62 +
-                [{"confidence": 0.9, "was_real": False}] * 38)
-    cal = calibrate(labelled)
-    print(f"\na score of 0.9 has actually meant {cal[0.9]:.0%} correct")
-    print("auto-post at 0.9?", may_auto_post(0.9, cal))
-    print("\nUntil you have checked, a confidence score is a number the model")
-    print("produced, not a measurement.")
+    print("same session, asked to review its own work:")
+    print("  ", self_review(get_client(SELF), GENERATION_HISTORY))
+    print()
+    print("a new call, given the code and the standard only:")
+    print("  ", independent_review(get_client(INDEPENDENT), CODE, REVIEW_CRITERIA))
+    print()
+    print("what the reviewer should and should not receive:")
+    for item, give in WHAT_THE_REVIEWER_GETS:
+        print("   %-44s %s" % (item, "give it" if give else "never"))
+    print()
+    print(VOTING_WARNING)
+    print()
+    print("In Claude Code this is two processes, not one conversation:")
+    print("   claude -p 'implement the change'")
+    print("   claude -p 'review the diff against the standards in CLAUDE.md'")

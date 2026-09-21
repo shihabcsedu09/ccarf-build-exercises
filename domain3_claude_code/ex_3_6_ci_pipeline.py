@@ -1,62 +1,167 @@
-"""3.6 Set up a CI pipeline with Claude Code.
+"""3.6 Run Claude Code in a pipeline.
 
--p stops the hang. A schema makes the output parseable. --max-turns
-bounds a loop. Deny rules are the only part that survives a hostile PR.
+Real scenario: the review job hangs. The logs show it waiting for interactive
+input that no runner will ever give it.
 
-Run it:  python ex_3_6_ci_pipeline.py
+Four things a pipeline needs that an interactive session does not: run once
+and exit, emit something a script can parse, carry the project's standards,
+and be unable to change anything.
+
+This writes the real workflow, the real schema and the real command line, then
+parses a real result envelope. It does not call the API, so it costs nothing.
+
+Run it:
+    python ex_3_6_ci_pipeline.py
 """
 import json
+import pathlib
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from claude_helpers import banner
 
 # ---------------------------------------------------------------- START HERE
-def build_command(prompt_file, schema_file, max_turns=30):
-    """The flags that matter, in the order they solve problems."""
-    return [
-        "claude", "-p", f"$(cat {prompt_file})",   # -p: answer once and exit
-        "--output-format", "json",                 # a result envelope, not prose
-        "--json-schema", schema_file,              # findings a script can post
-        "--max-turns", str(max_turns),             # a loop cannot run forever
-    ]
+# The shape the next step parses. Enforced by the CLI, not requested in prose.
+FINDINGS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "findings": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "file": {"type": "string"},
+                    "line": {"type": "integer"},
+                    "severity": {"type": "string",
+                                 "enum": ["critical", "high", "medium", "low"]},
+                    "issue": {"type": "string"},
+                    "fix": {"type": "string"},
+                },
+                "required": ["file", "line", "severity", "issue", "fix"],
+            },
+        }
+    },
+    "required": ["findings"],
+}
 
-
-SETTINGS = {                                       # .claude/settings.json, committed
+# Rules the job cannot talk its way past, committed so they ship with the
+# workflow. An allow rule left in settings.local.json never reaches the runner.
+CI_SETTINGS = {
     "permissions": {
-        "allow": ["Read", "Grep", "Glob", "Bash(git diff:*)"],
-        "deny":  ["Edit", "Write", "Bash(git push:*)"],
+        "allow": ["Read(**)", "Grep(**)", "Glob(**)", "Bash(npm test:*)"],
+        "deny": ["Edit(**)", "Write(**)", "Bash(git push:*)"],
     }
 }
 
-
-def is_allowed(tool, settings):
-    """Deny wins, and it runs before the tool does, so a prompt injected
-    into a pull request cannot argue with it."""
-    perms = settings["permissions"]
-    if any(tool.startswith(d.split("(")[0]) for d in perms["deny"]):
-        return False
-    return any(tool.startswith(a.split("(")[0]) for a in perms["allow"])
+PROMPT = ("Review this pull request for correctness and security. "
+          "Follow the standards in CLAUDE.md. Previous findings are in "
+          "review-prev.json; report only new or still-unresolved issues.")
 
 
-def read_result(envelope):
-    """What the job checks before posting anything."""
-    if envelope.get("is_error"):
-        return "fail the job"
-    if envelope["num_turns"] >= 30:
-        return "hit the turn cap: post findings but flag the run"
-    return f"post {len(envelope['structured_output']['findings'])} findings"
+def build_command(schema_path, max_turns=25):
+    """The exact argv. Every flag here answers a specific failure."""
+    return [
+        "claude",
+        "-p", PROMPT,                     # answer once and exit; without it the job hangs
+        "--output-format", "json",        # a parseable envelope, and cost fields
+        "--json-schema", str(schema_path),  # the findings shape is enforced
+        "--allowedTools", "Read,Grep,Glob,Bash(npm test:*)",  # only what review needs
+        "--max-turns", str(max_turns),    # a run that loops cannot burn the whole job
+    ]
 
+
+WORKFLOW = """name: claude-review
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+jobs:
+  review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4          # full repo, so CLAUDE.md is present
+      - name: Review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          %s > review.json
+      - run: node post-inline-comments.js review.json
+"""
+
+
+def parse_result(envelope):
+    """What --output-format json gives you back, and the fields finance asks for."""
+    data = json.loads(envelope)
+    findings = json.loads(data["result"])["findings"]
+    return {
+        "findings": findings,
+        "critical": [f for f in findings if f["severity"] == "critical"],
+        "cost_usd": data.get("total_cost_usd"),
+        "turns": data.get("num_turns"),
+        "hit_the_cap": data.get("num_turns", 0) >= 25 or data.get("is_error", False),
+    }
+
+
+SAMPLE_ENVELOPE = json.dumps({
+    "type": "result",
+    "subtype": "success",
+    "is_error": False,
+    "num_turns": 7,
+    "duration_ms": 41230,
+    "total_cost_usd": 0.1832,
+    "session_id": "b3f1c2e4-77aa-4c31-9d2e-6f0a1b8c9d55",
+    "result": json.dumps({"findings": [
+        {"file": "src/api/orders.ts", "line": 42, "severity": "critical",
+         "issue": "request body saved without validation", "fix": "validate against OrderSchema"},
+        {"file": "src/api/orders.ts", "line": 88, "severity": "low",
+         "issue": "unused import", "fix": "remove it"}]}),
+})
 
 if __name__ == "__main__":
-    for part in build_command("prompts/review.md", ".github/schema.json"):
-        print("   ", part)
+    banner("3.6 Claude Code in a pipeline", api=False)
+    root = pathlib.Path(tempfile.mkdtemp())
+    schema_path = root / "review-schema.json"
+    schema_path.write_text(json.dumps(FINDINGS_SCHEMA, indent=2))
+    (root / ".claude").mkdir()
+    (root / ".claude" / "settings.json").write_text(json.dumps(CI_SETTINGS, indent=2))
 
-    print("\npermission checks:")
-    for tool in ("Read", "Grep", "Edit", "Bash(git push --force)"):
-        print(f"  {tool:24} {'allowed' if is_allowed(tool, SETTINGS) else 'DENIED'}")
+    cmd = build_command(schema_path)
+    print("the command the job runs:")
+    print("   ", " ".join(shlex.quote(c) for c in cmd)[:300])
+    print()
+    print("what each flag answers:")
+    for flag, why in [
+            ("-p", "run once and exit. Without it the job waits for a human and hangs"),
+            ("--output-format json", "an envelope with cost and turn counts, not prose to scrape"),
+            ("--json-schema", "findings come back with file, line, severity, fix, every time"),
+            ("--allowedTools", "tests could not run when Bash was not permitted"),
+            ("--max-turns", "one run in fifteen looped for 40 minutes and produced nothing")]:
+        print("   %-22s %s" % (flag, why))
+    print()
+    print("committed permissions, so the job cannot edit or push:")
+    print("   deny:", CI_SETTINGS["permissions"]["deny"])
+    print()
 
-    print("\nresult envelopes:")
-    for env in ({"is_error": False, "num_turns": 12,
-                 "structured_output": {"findings": [1, 2, 3]}},
-                {"is_error": False, "num_turns": 30,
-                 "structured_output": {"findings": [1]}},
-                {"is_error": True, "num_turns": 4}):
-        head = f"turns={env['num_turns']:<3} error={str(env['is_error']):5}"
-        print(f"  {head} -> {read_result(env)}")
+    out = parse_result(SAMPLE_ENVELOPE)
+    print("parsing a real result envelope:")
+    print("   findings: %d   critical: %d   turns: %s   cost: $%.4f   hit the cap: %s"
+          % (len(out["findings"]), len(out["critical"]), out["turns"],
+             out["cost_usd"], out["hit_the_cap"]))
+    for f in out["findings"]:
+        print("     %s:%d  %-8s %s" % (f["file"], f["line"], f["severity"], f["issue"]))
+    print()
+    print("exit non-zero when anything critical is found:",
+          "fail the build" if out["critical"] else "pass")
+    print()
+    print("the workflow file:")
+    print(WORKFLOW % (" ".join(shlex.quote(c) for c in cmd[:6]) + " ..."))
+    claude = shutil.which("claude")
+    print("claude on this machine:", claude or "not installed")
+    if claude:
+        v = subprocess.run([claude, "--version"], capture_output=True, text=True, timeout=30)
+        print("version:", v.stdout.strip())
+    shutil.rmtree(root, ignore_errors=True)

@@ -1,74 +1,128 @@
-"""5.4 Build a context-resilient codebase explorer.
+"""5.4 Survive a long exploration, and a crash.
 
-Degradation is an attention problem, not a token-limit problem. Quality
-falls long before the window fills. The fix is to keep findings outside
-the conversation.
+Real scenario: after an hour in a large codebase Claude starts describing
+"the usual service layer" instead of the OrderRepository it read at minute
+ten. Nothing broke; the precise findings are buried under an hour of noise.
 
-Run it:  python ex_5_4_context_resilience.py
+Two separate problems, two separate fixes. Get findings out of the
+conversation while you work. Get progress onto disk so an interrupted run
+resumes instead of restarting.
+
+Run it:
+    python ex_5_4_context_resilience.py
 """
 import json
-import os
+import pathlib
+import shutil
+import sys
 import tempfile
 
-STATE = os.path.join(tempfile.gettempdir(), "explore_state.json")
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from claude_helpers import banner
 
 
 # ---------------------------------------------------------------- START HERE
-def record(finding):
-    """Write to a file, not to the transcript. A file survives compaction."""
-    state = load()
-    state["findings"].append(finding)
-    state["phase"] = finding["phase"]
-    with open(STATE, "w") as f:
-        json.dump(state, f, indent=2)
-    return state
+def note(scratchpad, finding):
+    """Write findings to a file as you go, then read the file later.
+
+    The conversation is where noise accumulates. A file is where facts stay
+    retrievable by name instead of by scrolling.
+    """
+    with scratchpad.open("a") as handle:
+        handle.write("- %s\n" % finding)
 
 
-def load():
-    if os.path.exists(STATE):
-        with open(STATE) as f:
-            return json.load(f)
-    return {"phase": None, "findings": [], "remaining": []}
+def delegate(subagent_findings):
+    """Send the noisy part somewhere else and keep only what comes back.
+
+    The 400 lines of search output never enter the main context at all.
+    """
+    return {"searched_lines": 400, "returned": subagent_findings}
 
 
-def resume_prompt():
-    """After a crash, this is the whole briefing. No transcript needed."""
-    s = load()
-    done = "\n".join(f"  - {f['phase']}: {f['text']}" for f in s["findings"])
-    todo = "\n".join(f"  - {t}" for t in s["remaining"])
-    return f"Already established:\n{done}\n\nStill to do:\n{todo}"
+def checkpoint(manifest_path, task_id, result):
+    """Record progress after every subtask, to durable storage.
+
+    The four things worth writing: what finished, what it produced, where it
+    stopped and what failed. Findings are the expensive part.
+    """
+    manifest = load_manifest(manifest_path)
+    manifest["done"].append(task_id)
+    manifest["findings"][task_id] = result
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+    return manifest
 
 
-def delegate(subtask):
-    """A subagent reads 40 files and returns 3 lines. The 40 files never
-    enter the main window. That is isolation, not just parallelism."""
-    files_read = subtask["files"]
-    return {"files_read": files_read, "returned_lines": 3,
-            "main_context_cost": 3}
+def load_manifest(manifest_path):
+    if manifest_path.exists():
+        return json.loads(manifest_path.read_text())
+    return {"done": [], "findings": {}, "failed": {}}
 
 
-def inline(subtask):
-    return {"files_read": subtask["files"], "returned_lines": subtask["files"] * 60,
-            "main_context_cost": subtask["files"] * 60}
+def run_pipeline(tasks, manifest_path, crash_at=None):
+    """Resume is a filter over what is already done, not a fresh start."""
+    manifest = load_manifest(manifest_path)
+    executed = []
+    for task in tasks:
+        if task in manifest["done"]:
+            continue                      # already finished on an earlier run
+        if crash_at is not None and task == crash_at:
+            raise RuntimeError("process died during %s" % task)
+        executed.append(task)
+        manifest = checkpoint(manifest_path, task, "result of %s" % task)
+    return executed, manifest
+
+
+def submit_once(ledger, idempotency_key, payload):
+    """A crash can land between doing the work and recording it, so the work
+    itself has to be safe to repeat."""
+    if idempotency_key in ledger:
+        return "already submitted, returning the stored result", ledger
+    ledger[idempotency_key] = payload
+    return "submitted", ledger
 
 
 if __name__ == "__main__":
-    if os.path.exists(STATE):
-        os.remove(STATE)
+    banner("5.4 scratchpads, checkpoints and idempotency", api=False)
+    root = pathlib.Path(tempfile.mkdtemp())
+    scratchpad = root / "NOTES.md"
 
-    s = load()
-    s["remaining"] = ["map the payment path", "find the retry policy"]
-    with open(STATE, "w") as f:
-        json.dump(s, f)
+    for finding in ["OrderRepository in src/repos/order.py, used by 14 callers",
+                    "PricingService applies discounts, not OrderService",
+                    "nightly job re-reads the same config; candidate for caching"]:
+        note(scratchpad, finding)
+    print("scratchpad after exploring:")
+    print(scratchpad.read_text().rstrip())
+    print("   later you ask Claude to read NOTES.md, instead of scrolling back")
+    print("   through an hour of Grep output.")
+    print()
 
-    record({"phase": "entry points", "text": "requests arrive at api/router.py"})
-    record({"phase": "auth", "text": "auth is middleware, not per-route"})
+    out = delegate(["12 call sites", "2 of them in tests"])
+    print("delegated search: %d lines searched, %d findings returned to the main chat"
+          % (out["searched_lines"], len(out["returned"])))
+    print()
 
-    print(resume_prompt())
+    tasks = ["t1", "t2", "t3", "t4", "t5"]
+    manifest_path = root / "state.json"
+    try:
+        run_pipeline(tasks, manifest_path, crash_at="t4")
+    except RuntimeError as exc:
+        print("run 1:", exc)
+    m = load_manifest(manifest_path)
+    print("   manifest on disk: done=%s" % m["done"])
+    print()
 
-    task = {"files": 40}
-    print("\ninline      :", inline(task))
-    print("delegated   :", delegate(task))
-    print("\nSame answer. One of them leaves 2400 lines in the window that the")
-    print("model must keep attending to for the rest of the session.")
-    os.remove(STATE)
+    executed, m = run_pipeline(tasks, manifest_path)
+    print("run 2 after restart: executed %s" % executed)
+    print("   skipped %s, because they were already recorded" % m["done"][:3])
+    print("   findings from run 1 survived: %d" % len(m["findings"]))
+    print()
+
+    ledger = {}
+    msg1, ledger = submit_once(ledger, "doc-8891-refund", {"amount": 47.90})
+    msg2, ledger = submit_once(ledger, "doc-8891-refund", {"amount": 47.90})
+    print("submitting the same work twice after a crash:")
+    print("   first  ->", msg1)
+    print("   second ->", msg2)
+    print("   without the key, the resume pays the refund a second time.")
+    shutil.rmtree(root, ignore_errors=True)
